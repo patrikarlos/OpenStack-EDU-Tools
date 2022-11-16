@@ -55,7 +55,7 @@ IGNOREFILE=
 created=0
 added=0
 
-
+PASSWDFILE=$(mktemp)
 
 while getopts vhi:-: OPT; do
     if [ "$OPT" = "-" ]; then
@@ -125,7 +125,7 @@ fi;
 
 
 #echo "curl -H \"Authorization: Bearer $TOKEN\" \"https://$site.instructure.com/api/v1/courses/$courseID/users\" "
-if [ $VERBOSE ]; then
+if [ "$VERBOSE" = true ]; then
     echo "Collecting data from Canvas."
 fi
 
@@ -135,7 +135,7 @@ courseID=$(echo "$courseData" | awk -F'*' '{print $2}')
 courseString=$(echo "$courseData" | awk -F'*' '{print $1}')
 
 found=$(echo "$courseID" | wc -l )
-if [ $VERBOSE ]; then
+if [ "$VERBOSE" = true ]; then
     echo "found $found"
 fi
 
@@ -150,16 +150,20 @@ if [ -z "$courseID" ]; then
     exit;
 fi
 
-echo "Course ID: $courseID - $courseString"
+echo "Course ID: $courseID - $courseString  ($PASSWDFILE)"
 
 
 data1=$(curl -H "Authorization: Bearer $TOKEN" -s  "https://$site.instructure.com/api/v1/courses/$courseID")
 name=$(echo $data1 | jq '.name')
-if [ $VERBOSE ]; then
+if [ "$VERBOSE" = true ]; then
     echo "Course: $name"
 fi
 
-data=$(curl -H "Authorization: Bearer $TOKEN" -s  "https://$site.instructure.com/api/v1/courses/$courseID/users?per_page=10") #$maxEntries")
+#TEST
+#data=$(curl -H "Authorization: Bearer $TOKEN" -s  "https://$site.instructure.com/api/v1/courses/$courseID/users?per_page=10") #$maxEntries")
+
+##PRODUCTION
+data=$(curl -H "Authorization: Bearer $TOKEN" -s  "https://$site.instructure.com/api/v1/courses/$courseID/users?per_page=$maxEntries")
 
 emails=$(echo "$data" | jq ".[].email" | tr -d '"')
 names=$(echo "$data" | jq ".[].name" | tr -d '"')
@@ -182,7 +186,7 @@ emStrip=$(echo "$emname" | sed  's/\"\"/\"/g')
 cnt=$(echo "$emStrip" | wc -l)
 
 
-echo "Have $cnt students to check."
+echo "Have $cnt students to check, storing passwords in $PASSWDFILE."
 
 ##Data found at the end, as input to the while loop. 
 while read line; do 
@@ -213,11 +217,12 @@ while read line; do
 	    echo -n " Some error occured."
 	else
 	    echo -n " created user:"
-	    if [ -z "$GenString" ]; then
-		GenString=$(echo -e "$uname $passwdString\n")
-	    else
-		GenString=$(echo -e "$GenString$uname $passwdString")
+	    if [ "$VERBOSE" = true ]; then
+		echo -n " |$EMAIL - $uname - $passwdString| "
 	    fi
+
+	    echo "$EMAIL - $uname - $passwdString" >> $PASSWDFILE
+	   
 	    ((created++))
 	fi	
     else
@@ -230,14 +235,4 @@ while read line; do
 done < <(echo "$emStrip")
 
 echo "Created $created users"
-echo "Added $added users"
-echo "User Password"
-echo "-------------"
-echo "$GenString"
-echo "-------------"
-
-		    
-
-
-
-
+echo "Added $added users, $PASSWDFILE"
