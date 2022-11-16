@@ -177,6 +177,7 @@ while read Q; do
 #    echo ""
 done < <(echo "$Students" )
 
+echo "Students: $noStud"
 echo "Removed: $removedCNT"
 echo "Purged:  $purgedCNT"
 echo "Ignored: $ignoredCNT"
