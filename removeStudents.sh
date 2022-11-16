@@ -93,21 +93,34 @@ if [ -z "$project" ]; then
 fi
 
 
+removedCNT=0
+ignoredCNT=0
+purgedCNT=0
+otherroleCNT=0
+
 Students=$(openstack user list --domain $domain --project $project -f csv | tail -n +2| tr -d '"' | tr ',' ' ')
 noStud=$(echo "$Students" | wc -l)
 
 echo "Got $noStud to parse."
-echo "$Students" | while read Q; do
+while read Q; do
 #    echo "$Q"
     read -r UUID uname <<<"$(echo "$Q")"
 
+    #grab email
+    UEMAIL=$(openstack user show --domain EDU $uname -f shell --prefix OSUS_ | grep OSUS_email | awk -F'=' '{print $2}' | tr -d '"')
+
+    
     if [ "$IGNOREFILE" ]; then
-	ignoreIt=$(grep "$uname" $IGNOREFILE)
+	if [ $VERBOSE ]; then
+	    echo "Checking $UEMAIL in $IGNOREFILE";
+	fi
+	ignoreIt=$(grep "$UEMAIL" $IGNOREFILE)
 	if [ ! -z "$ignoreIt" ]; then
 	    if [ $VERBOSE ]; then
 		echo "Ignoring $uname, found in $IGNOREFILE"
-		continue;
 	    fi
+	    ((ignoredCNT++))
+	    continue;       
 	fi
     fi
 	    
@@ -118,7 +131,10 @@ echo "$Students" | while read Q; do
     out=$(openstack role remove --user-domain $domain --project $project --user $uname member 2>&1)
     if [ ! -z "$out" ]; then
 	if [[ "$out" == *"not find role"* ]]; then
-	    echo -n " User does not have the member role:"
+	    uroles=$(openstack role assignment list --user-domain $domain --project $project --user $uname -f value --names -c Role | tr '\n' ' ')
+	    echo -n " User does not have the member role ($uroles):"
+
+	    ((otherroleCNT++))
 	else
 	    echo "OpenStack returned<begin>"
 	    echo "$out"
@@ -126,6 +142,7 @@ echo "$Students" | while read Q; do
 	fi
     else
 	echo -n " Removed role:"
+	((removedCNT++))
     fi
 
 
@@ -142,10 +159,13 @@ echo "$Students" | while read Q; do
 		echo " $rem"
 	    else
 		echo " purged."
+		((purgedCNT++))
 	    fi
 	else
 	    echo " retained."
 	fi
+    else
+	echo ""
     fi
 
 #    remData=$(openstack role assignment list --user-domain $domain  --user "$uname" --names -f csv | tail -n +2 )
@@ -155,4 +175,9 @@ echo "$Students" | while read Q; do
 #    echo " Still have $remTotal, $remAdmin as admin, and $remMember as member.\n"
   
 #    echo ""
-done
+done < <(echo "$Students" )
+
+echo "Removed: $removedCNT"
+echo "Purged:  $purgedCNT"
+echo "Ignored: $ignoredCNT"
+echo "Other role: $otherroleCNT"
